@@ -1,0 +1,11 @@
+modules = ["python-3.11"]
+run = "python3 main.py"
+entrypoint = "main.py"
+
+[nix]
+channel = "stable-23_11"
+packages = ["psmisc"]
+
+[[ports]]
+localPort = 8080
+externalPort = 80

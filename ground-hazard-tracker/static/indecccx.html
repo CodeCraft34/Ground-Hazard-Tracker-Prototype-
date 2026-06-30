@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ground Hazard Tracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #map { height: 360px; width: 100%; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body class="bg-white text-black">
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center bg-black px-4">
+  <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl p-8">
+    <h1 class="text-2xl font-bold text-center mb-1">Ground Hazard Tracker</h1>
+    <p class="text-center text-gray-500 text-sm mb-6">Report it. See it. Stay safe.</p>
+    <div class="space-y-3">
+      <input id="login-username" type="text" placeholder="Username"
+             class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+      <input id="login-password" type="password" placeholder="Password"
+             class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+      <button id="login-btn" class="w-full bg-black text-white rounded-lg py-2 text-sm font-semibold hover:bg-gray-800 transition">Login</button>
+      <button id="guest-btn" class="w-full border border-black text-black rounded-lg py-2 text-sm font-semibold hover:bg-gray-100 transition">Continue as Guest</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SCREEN ============ -->
+<div id="app-screen" class="hidden min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-black text-white px-4 py-3 flex items-center justify-between">
+    <h1 class="text-lg md:text-xl font-bold tracking-tight">🛑 Ground Hazard Tracker</h1>
+    <span id="user-tag" class="text-xs text-gray-300"></span>
+  </header>
+
+  <!-- Emergency banner -->
+  <div id="emergency-banner" class="hidden bg-red-600 text-white text-center font-semibold py-2 px-4 text-sm md:text-base"></div>
+
+  <!-- Geolocation fallback / manual override -->
+  <div id="geo-warning" class="hidden bg-yellow-100 border-b border-yellow-300 text-yellow-900 text-sm px-4 py-3">
+    <p class="mb-2">⚠️ Location access unavailable (blocked, denied, or non-HTTPS). Enter coordinates manually to test:</p>
+    <div class="flex flex-wrap gap-2 items-center">
+      <input id="manual-lat" type="number" step="any" placeholder="Latitude" class="border border-gray-300 rounded px-2 py-1 text-sm w-32" />
+      <input id="manual-lon" type="number" step="any" placeholder="Longitude" class="border border-gray-300 rounded px-2 py-1 text-sm w-32" />
+      <button id="manual-set-btn" class="bg-black text-white text-sm px-3 py-1 rounded">Set Location</button>
+    </div>
+  </div>
+
+  <!-- Split layout -->
+  <div class="flex-1 flex flex-col lg:flex-row gap-4 p-4">
+
+    <!-- Sidebar: report form -->
+    <aside class="lg:w-80 w-full bg-white border border-gray-200 rounded-xl p-4 shadow-sm h-fit">
+      <h2 class="font-semibold text-base mb-3">Report an Issue</h2>
+      <form id="report-form" class="space-y-3">
+        <select id="issue-type" name="issue_type" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="" disabled selected>Select issue type</option>
+          <option>Broken Bridge</option>
+          <option>Fallen Tree</option>
+          <option>Pothole</option>
+          <option>Flooding</option>
+          <option>Road Collapse</option>
+          <option>Landslide</option>
+          <option>Other</option>
+        </select>
+        <textarea id="description" name="description" required rows="3" placeholder="Describe the hazard..."
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+        <input id="image-file" name="image_file" type="file" accept="image/*" required class="w-full text-sm" />
+        <p class="text-xs text-gray-400">Coordinates: <span id="coords-display">awaiting location...</span></p>
+        <button type="submit" class="w-full bg-black text-white rounded-lg py-2 text-sm font-semibold hover:bg-gray-800 transition">Submit Report</button>
+      </form>
+    </aside>
+
+    <!-- Main: map + feed -->
+    <main class="flex-1 flex flex-col gap-4 min-w-0">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div id="map"></div>
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex-1 flex flex-col min-h-[300px]">
+        <input id="search-input" type="text" placeholder="Search hazards (e.g. bridge, tree)..."
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3" />
+        <div id="feed-container" class="space-y-3 overflow-y-auto" style="max-height: 420px;"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  let userLat = null, userLon = null;
+  let map = null, userMarker = null;
+  let hazardMarkers = [];
+
+  // ---------- Login flow ----------
+  function enterApp(label) {
+    $("#login-screen").addClass("hidden");
+    $("#app-screen").removeClass("hidden");
+    $("#user-tag").text(label);
+    initLocation();
+  }
+  $("#login-btn").on("click", function () {
+    var u = $("#login-username").val().trim();
+    enterApp(u ? ("Hi, " + u) : "Hi, Guest");
+  });
+  $("#guest-btn").on("click", function () {
+    enterApp("Guest mode");
+  });
+
+  // ---------- Geolocation with prototyping override ----------
+  function initLocation() {
+    if (navigator.geolocation && window.isSecureContext) {
+      navigator.geolocation.getCurrentPosition(
+        function (pos) { setLocation(pos.coords.latitude, pos.coords.longitude); },
+        function () { showManualOverride(); },
+        { timeout: 8000 }
+      );
+    } else {
+      showManualOverride();
+    }
+  }
+
+  function showManualOverride() {
+    $("#geo-warning").removeClass("hidden");
+  }
+
+  $("#manual-set-btn").on("click", function () {
+    var lat = parseFloat($("#manual-lat").val());
+    var lon = parseFloat($("#manual-lon").val());
+    if (!isNaN(lat) && !isNaN(lon)) {
+      setLocation(lat, lon);
+      $("#geo-warning").addClass("hidden");
+    }
+  });
+
+  function setLocation(lat, lon) {
+    userLat = lat;
+    userLon = lon;
+    $("#coords-display").text(lat.toFixed(5) + ", " + lon.toFixed(5));
+    initMap(lat, lon);
+    loadFeed();
+  }
+
+  // ---------- Map ----------
+  function initMap(lat, lon) {
+    if (!map) {
+      map = L.map('map').setView([lat, lon], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+    } else {
+      map.setView([lat, lon], 13);
+    }
+
+    var blueIcon = new L.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    if (userMarker) { map.removeLayer(userMarker); }
+    userMarker = L.marker([lat, lon], { icon: blueIcon }).addTo(map).bindPopup("Your Current Position");
+  }
+
+  function clearHazardMarkers() {
+    hazardMarkers.forEach(function (m) { map.removeLayer(m); });
+    hazardMarkers = [];
+  }
+
+  // ---------- Feed ----------
+  function loadFeed() {
+    if (userLat === null || userLon === null) return;
+    $.ajax({
+      url: "/api/feed",
+      method: "GET",
+      data: { user_lat: userLat, user_lon: userLon, radius_km: 5.0 },
+      success: function (data) {
+        renderFeed(data);
+        renderMarkers(data);
+        updateEmergencyBanner(data);
+      }
+    });
+  }
+
+  function updateEmergencyBanner(data) {
+    var nearCount = data.filter(function (h) { return h.is_near; }).length;
+    if (nearCount > 0) {
+      $("#emergency-banner").removeClass("hidden")
+        .text("⚠️ CRITICAL WARNING: " + nearCount + " transit hazard" + (nearCount > 1 ? "s" : "") + " reported near your current location!");
+    } else {
+      $("#emergency-banner").addClass("hidden");
+    }
+  }
+
+  function renderMarkers(data) {
+    clearHazardMarkers();
+    var redIcon = new L.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+    var grayIcon = new L.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    data.forEach(function (h) {
+      var icon = h.is_near ? redIcon : grayIcon;
+      var popupHtml = '<div class="text-sm">' +
+        '<strong>' + escapeHtml(h.issue_type) + '</strong><br>' +
+        escapeHtml(h.description) + '<br>' +
+        '<span class="text-gray-500">' + h.distance_km + ' km away</span><br>' +
+        '<img src="' + h.image_path + '" style="max-width:160px;margin-top:4px;border-radius:6px;">' +
+        '</div>';
+      var marker = L.marker([h.latitude, h.longitude], { icon: icon }).addTo(map).bindPopup(popupHtml);
+      hazardMarkers.push(marker);
+    });
+  }
+
+  function renderFeed(data) {
+    var container = $("#feed-container");
+    container.empty();
+    if (data.length === 0) {
+      container.append('<p class="text-sm text-gray-400">No hazards reported yet.</p>');
+      return;
+    }
+    data.forEach(function (h) {
+      var badge = h.is_near
+        ? '<span class="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">NEARBY</span>'
+        : '<span class="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">FAR</span>';
+      var card = $('<div class="feed-card border border-gray-200 rounded-lg p-3 flex gap-3 items-start"></div>');
+      card.append(
+        '<img src="' + h.image_path + '" class="w-16 h-16 object-cover rounded-md flex-shrink-0 bg-gray-100" />' +
+        '<div class="flex-1 min-w-0">' +
+          '<div class="flex items-center gap-2 mb-1">' +
+            '<span class="font-semibold text-sm">' + escapeHtml(h.issue_type) + '</span>' + badge +
+          '</div>' +
+          '<p class="text-xs text-gray-600 truncate">' + escapeHtml(h.description) + '</p>' +
+          '<p class="text-xs text-gray-400 mt-1">' + h.distance_km + ' km away</p>' +
+        '</div>'
+      );
+      container.append(card);
+    });
+  }
+
+  function escapeHtml(s) {
+    return $('<div>').text(s).html();
+  }
+
+  // ---------- Live search filter ----------
+  $("#search-input").on("keyup", function () {
+    var term = $(this).val().toLowerCase();
+    $(".feed-card").each(function () {
+      var text = $(this).text().toLowerCase();
+      $(this).toggle(text.indexOf(term) > -1);
+    });
+  });
+
+  // ---------- Form submission ----------
+  $("#report-form").on("submit", function (e) {
+    e.preventDefault();
+    if (userLat === null || userLon === null) {
+      alert("Location not set yet. Please allow location access or set it manually.");
+      return;
+    }
+    var formData = new FormData(this);
+    formData.append("latitude", userLat);
+    formData.append("longitude", userLon);
+
+    $.ajax({
+      url: "/api/report",
+      type: "POST",
+      data: formData,
+      processData: false,
+      contentType: false,
+      success: function () {
+        $("#report-form")[0].reset();
+        loadFeed();
+      },
+      error: function () {
+        alert("Failed to submit report. Please try again.");
+      }
+    });
+  });
+</script>
+</body>
+</html>
