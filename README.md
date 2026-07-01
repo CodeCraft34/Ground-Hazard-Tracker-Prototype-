@@ -1,5 +1,5 @@
-# Ground Hazard Tracker — Setup Guide (Mobile / Replit)
-
+# Ground Hazard Tracker — Setup Guide 
+##~created by CodeCraft
 ## 1. Create the Replit project
 1. Open the Replit app (or replit.com in your phone browser).
 2. Tap **+ Create Repl**.
