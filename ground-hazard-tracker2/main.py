@@ -144,6 +144,7 @@ def get_feed(
     user_lon: float = Query(...),
     radius_km: float = Query(5.0),
 ):
+    
     with Session(engine) as session:
         reports = session.exec(select(HazardReport)).all()
         
@@ -216,3 +217,20 @@ def post_reply(hazard_id: int, username: str = Form(...), message: str = Form(..
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
+def calculate_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
+    # Convert degrees to radians
+    d_lon = math.radians(lon2 - lon1)
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+
+    # Calculate bearing formula
+    y = math.sin(d_lon) * math.cos(lat2_rad)
+    x = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(d_lon)
+    bearing = math.degrees(math.atan2(y, x))
+    bearing = (bearing + 360) % 360  # Normalize to 0-360 degrees
+
+    # Map degrees to 8 compass cardinal points
+    cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    idx = int((bearing + 22.5) / 45) % 8
+    return cardinals[idx]

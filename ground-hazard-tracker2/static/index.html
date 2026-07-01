@@ -178,6 +178,17 @@
               Confirm location
             </button>
           </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="text-sm font-semibold truncate" :class="{'line-through text-mute': h.is_solved}">{{ h.issue_type }}</span>
+              </div>
+            <p class="text-xs text-mute truncate">{{ h.description }}</p>
+
+            <div class="flex items-center gap-3 mt-1 text-[11px] font-mono text-mute">
+              <span>📍 {{ h.distance_km }} km away</span>
+              <span class="text-hazard font-bold">🧭 Direction: {{ h.compass_direction }}</span>
+            </div>
+          </div>
 
           <form @submit.prevent="submitReport" class="bg-surface border border-line rounded-md p-4 space-y-3.5">
             <p class="text-[11px] font-mono tracking-wider text-mute">REPORT AN ISSUE</p>

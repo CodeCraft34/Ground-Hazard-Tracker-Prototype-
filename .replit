@@ -7,8 +7,11 @@ channel = "stable-23_11"
 packages = ["psmisc"]
 
 [[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
 localPort = 8000
-externalPort = 8000
 
 [[ports]]
 localPort = 8080
@@ -46,13 +49,13 @@ outputType = "webview"
 name = "Ground Hazard Tracker 2"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd ground-hazard-tracker2 && uvicorn main:app --host 0.0.0.0 --port 8000"
-waitForPort = 8000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd ground-hazard-tracker2 && uvicorn main:app --host 0.0.0.0 --port 5000"
+waitForPort = 5000
 
 [agent]
 expertMode = true
