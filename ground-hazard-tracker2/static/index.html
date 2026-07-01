@@ -415,30 +415,48 @@ createApp({
     let map = null, userMarker = null, hazardMarkers = [];
     const mapEl = ref(null);
 
+    
     function login() {
       userTag.value = loginUsername.value.trim() ? ('Hi, ' + loginUsername.value.trim()) : 'Hi, Guest';
       screen.value = 'app';
-      nextTick(detectLocation);
+      // Force immediate view switch, then try detecting location safely
+      nextTick(() => {
+        detectLocation();
+      });
     }
+
     function guestLogin() {
       userTag.value = 'Guest mode';
       screen.value = 'app';
-      nextTick(detectLocation);
+      // Force immediate view switch, then try detecting location safely
+      nextTick(() => {
+        detectLocation();
+      });
     }
-
+    
     function detectLocation() {
       locationStatus.value = 'detecting';
-      if (navigator.geolocation && window.isSecureContext) {
+
+      // If browser supports location and it's an HTTPS connection
+      if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          pos => setLocation(pos.coords.latitude, pos.coords.longitude),
-          () => { locationStatus.value = 'manualOpen'; },
-          { timeout: 8000 }
+          pos => {
+            setLocation(pos.coords.latitude, pos.coords.longitude);
+          },
+          err => {
+            console.warn("Location access denied or timed out. Switching to manual input.");
+            // Fallback: If it fails, open the manual inputs instead of breaking
+            locationStatus.value = 'editing'; 
+            setLocation(22.5726, 88.3639); // Default temporary coordinates
+          },
+          { timeout: 5000, enableHighAccuracy: false }
         );
       } else {
-        locationStatus.value = 'manualOpen';
+        locationStatus.value = 'editing';
+        setLocation(22.5726, 88.3639);
       }
     }
-
+    
     function confirmManualLocation() {
       const lat = parseFloat(manualLat.value);
       const lon = parseFloat(manualLon.value);

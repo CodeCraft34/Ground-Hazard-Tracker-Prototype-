@@ -37,13 +37,13 @@ args = "Ground Hazard Tracker 2"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd ground-hazard-tracker && python3 main.py"
-waitForPort = 8080
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "while true; do cd /home/runner/workspace/ground-hazard-tracker && python3 main.py; sleep 2; done"
+waitForPort = 8080
 
 [[workflows.workflow]]
 name = "Ground Hazard Tracker 2"
@@ -54,7 +54,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd ground-hazard-tracker2 && uvicorn main:app --host 0.0.0.0 --port 5000"
+args = "while true; do cd /home/runner/workspace/ground-hazard-tracker2 && uvicorn main:app --host 0.0.0.0 --port 5000; sleep 2; done"
 waitForPort = 5000
 
 [agent]
